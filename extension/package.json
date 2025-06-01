@@ -1,0 +1,9 @@
+{
+    "name": "chat-relay-extension",
+    "version": "1.0.0",
+    "description": "Browser extension for Chat Relay system",
+    "private": true,
+    "dependencies": {
+        "chat-relay-extension": "file:"
+    }
+}

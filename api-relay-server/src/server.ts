@@ -15,13 +15,14 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see https://www.gnu.org/licenses/.
  */
-import express, { Request, Response, NextFunction, Router } from 'express';
 import bodyParser from 'body-parser';
+import { exec } from 'child_process';
 import cors from 'cors';
-import { WebSocketServer, WebSocket } from 'ws';
+import express, { NextFunction, Request, Response, Router } from 'express';
+import fs from 'fs';
 import http from 'http';
 import path from 'path';
-import fs from 'fs';
+import { WebSocket, WebSocketServer } from 'ws';
 // Interfaces
 interface PendingRequest {
   resolve: (value: any) => void;
@@ -91,16 +92,16 @@ type AdminLogDataType = ChatRequestData | ChatResponseData | ChatErrorData | any
 interface AdminLogEntry {
   timestamp: string;
   type:
-    | 'CHAT_REQUEST_RECEIVED'
-    | 'CHAT_RESPONSE_SENT'
-    | 'CHAT_ERROR_RESPONSE_SENT'
-    | 'CHAT_REQUEST_QUEUED'
-    | 'CHAT_REQUEST_DROPPED'
-    | 'CHAT_REQUEST_DEQUEUED'
-    | 'CHAT_REQUEST_PROCESSING'
-    | 'CHAT_REQUEST_ERROR' // For pre-processing errors like no extension
-    | 'SETTING_UPDATE' // Existing type, ensure it's included
-    | string; // Fallback for other/future types
+  | 'CHAT_REQUEST_RECEIVED'
+  | 'CHAT_RESPONSE_SENT'
+  | 'CHAT_ERROR_RESPONSE_SENT'
+  | 'CHAT_REQUEST_QUEUED'
+  | 'CHAT_REQUEST_DROPPED'
+  | 'CHAT_REQUEST_DEQUEUED'
+  | 'CHAT_REQUEST_PROCESSING'
+  | 'CHAT_REQUEST_ERROR' // For pre-processing errors like no extension
+  | 'SETTING_UPDATE' // Existing type, ensure it's included
+  | string; // Fallback for other/future types
   requestId: string;
   data: AdminLogDataType;
 }
@@ -147,8 +148,8 @@ const initialConfig = loadServerConfig();
 
 // Initialize newRequestBehavior from config, defaulting to 'queue'
 newRequestBehavior = initialConfig.newRequestBehavior && (initialConfig.newRequestBehavior === 'queue' || initialConfig.newRequestBehavior === 'drop')
-                    ? initialConfig.newRequestBehavior
-                    : 'queue';
+  ? initialConfig.newRequestBehavior
+  : 'queue';
 
 const PORT = initialConfig.port || parseInt(process.env.PORT || '3003', 10);
 let currentRequestTimeoutMs = initialConfig.requestTimeoutMs || parseInt(process.env.REQUEST_TIMEOUT_MS || '120000', 10);
@@ -165,76 +166,66 @@ app.get('/admin', (req: Request, res: Response) => {
   res.sendFile(path.join(adminUIDirectory, 'admin.html'));
 });
 // Create HTTP server
-const server = http.createServer(app);
-// Create WebSocket server for browser extension communication
-const wss = new WebSocketServer({ server });
-// Handle WebSocket connections from browser extensions
-wss.on('connection', (ws: WebSocket) => {
-  console.log('Browser extension connected');
-  activeConnections.push(ws);
-  // Handle messages from browser extension
-  ws.on('message', (message: string) => {
-    try {
-      const data: WebSocketMessage = JSON.parse(message.toString());
-      let requestIdToProcess: number | undefined = undefined;
-      let responseDataToUse: string | undefined = undefined;
-      let isErrorMessage = false;
+/**
+ * WebSocket message handler for browser extension connections.
+ */
+function handleExtensionMessage(message: string) {
+  try {
+    const data: WebSocketMessage = JSON.parse(message.toString());
+    let requestIdToProcess: number | undefined = undefined;
+    let responseDataToUse: string | undefined = undefined;
+    let isErrorMessage = false;
 
-      console.log(`SERVER: WebSocket message received from extension: type=${data.type}, requestId=${data.requestId}`);
+    console.log(`SERVER: WebSocket message received from extension: type=${data.type}, requestId=${data.requestId}`);
 
-      if (data.type === 'CHAT_RESPONSE') {
-        requestIdToProcess = data.requestId;
-        responseDataToUse = data.response;
-        console.log(`SERVER: Processing CHAT_RESPONSE for requestId: ${data.requestId}`);
-      } else if (data.type === 'CHAT_RESPONSE_CHUNK' && data.isFinal === true) {
-        requestIdToProcess = data.requestId;
-        responseDataToUse = data.chunk;
-        console.log(`SERVER: Processing final CHAT_RESPONSE_CHUNK for requestId: ${data.requestId}`);
-      } else if (data.type === 'CHAT_RESPONSE_ERROR') {
-        requestIdToProcess = data.requestId;
-        responseDataToUse = data.error || "Unknown error from extension";
-        isErrorMessage = true;
-        console.log(`SERVER: Processing CHAT_RESPONSE_ERROR for requestId: ${data.requestId}`);
-      } else if (data.type === 'CHAT_RESPONSE_STREAM_ENDED') {
-        // This message type currently doesn't carry the final data itself in background.js,
-        // the CHAT_RESPONSE_CHUNK with isFinal=true does.
-        // So, we just log it. The promise should be resolved by the final CHUNK.
-        console.log(`SERVER: Received CHAT_RESPONSE_STREAM_ENDED for requestId: ${data.requestId}. No action taken as final data comes in CHUNK.`);
-        return;
-      } else {
-        console.log(`SERVER: Received unhandled WebSocket message type: ${data.type} for requestId: ${data.requestId}`);
-        return;
-      }
-
-      if (requestIdToProcess !== undefined) {
-        const pendingRequest = pendingRequests.get(requestIdToProcess);
-        if (pendingRequest) {
-          if (isErrorMessage) {
-            console.error(`SERVER: Rejecting request ${requestIdToProcess} with error: ${responseDataToUse}`);
-            pendingRequest.reject(new Error(responseDataToUse || "Error from extension"));
-          } else {
-            console.log(`SERVER: Resolving request ${requestIdToProcess} with data (first 100 chars): ${(responseDataToUse || "").substring(0,100)}`);
-            pendingRequest.resolve(responseDataToUse);
-          }
-          pendingRequests.delete(requestIdToProcess);
-          console.log(`SERVER: Request ${requestIdToProcess} ${isErrorMessage ? 'rejected' : 'resolved'} and removed from pending.`);
-        } else {
-          console.warn(`SERVER: Received response for unknown or timed-out requestId: ${requestIdToProcess}. No pending request found.`);
-        }
-      } else {
-        // This case should ideally not be reached if the above 'if/else if' for types is exhaustive for messages carrying a requestId.
-        console.warn(`SERVER: Received WebSocket message but could not determine requestId to process. Type: ${data.type}, Full Data:`, data);
-      }
-    } catch (error) {
-      console.error('SERVER: Error processing WebSocket message:', error, 'Raw message:', message.toString());
+    if (data.type === 'CHAT_RESPONSE') {
+      requestIdToProcess = data.requestId;
+      responseDataToUse = data.response;
+      console.log(`SERVER: Processing CHAT_RESPONSE for requestId: ${data.requestId}`);
+    } else if (data.type === 'CHAT_RESPONSE_CHUNK' && data.isFinal === true) {
+      requestIdToProcess = data.requestId;
+      responseDataToUse = data.chunk;
+      console.log(`SERVER: Processing final CHAT_RESPONSE_CHUNK for requestId: ${data.requestId}`);
+    } else if (data.type === 'CHAT_RESPONSE_ERROR') {
+      requestIdToProcess = data.requestId;
+      responseDataToUse = data.error || "Unknown error from extension";
+      isErrorMessage = true;
+      console.log(`SERVER: Processing CHAT_RESPONSE_ERROR for requestId: ${data.requestId}`);
+    } else if (data.type === 'CHAT_RESPONSE_STREAM_ENDED') {
+      // This message type currently doesn't carry the final data itself in background.js,
+      // the CHAT_RESPONSE_CHUNK with isFinal=true does.
+      // So, we just log it. The promise should be resolved by the final CHUNK.
+      console.log(`SERVER: Received CHAT_RESPONSE_STREAM_ENDED for requestId: ${data.requestId}. No action taken as final data comes in CHUNK.`);
+      return;
+    } else {
+      console.log(`SERVER: Received unhandled WebSocket message type: ${data.type} for requestId: ${data.requestId}`);
+      return;
     }
-  });
-  // Handle disconnection
-  ws.on('close', () => {
-    console.log('Browser extension disconnected');
-    activeConnections = activeConnections.filter(conn => conn !== ws);
-  });
-});
+
+    if (requestIdToProcess !== undefined) {
+      const pendingRequest = pendingRequests.get(requestIdToProcess);
+      if (pendingRequest) {
+        if (isErrorMessage) {
+          console.error(`SERVER: Rejecting request ${requestIdToProcess} with error: ${responseDataToUse}`);
+          pendingRequest.reject(new Error(responseDataToUse || "Error from extension"));
+        } else {
+          console.log(`SERVER: Resolving request ${requestIdToProcess} with data (first 100 chars): ${(responseDataToUse || "").substring(0, 100)}`);
+          pendingRequest.resolve(responseDataToUse);
+        }
+        pendingRequests.delete(requestIdToProcess);
+        console.log(`SERVER: Request ${requestIdToProcess} ${isErrorMessage ? 'rejected' : 'resolved'} and removed from pending.`);
+      } else {
+        console.warn(`SERVER: Received response for unknown or timed-out requestId: ${requestIdToProcess}. No pending request found.`);
+      }
+    } else {
+      // This case should ideally not be reached if the above 'if/else if' for types is exhaustive for messages carrying a requestId.
+      console.warn(`SERVER: Received WebSocket message but could not determine requestId to process. Type: ${data.type}, Full Data:`, data);
+    }
+  } catch (error) {
+    console.error('SERVER: Error processing WebSocket message:', error, 'Raw message:', message.toString());
+  }
+}
+// Handle WebSocket connections from browser extensions
 // Function to log admin messages to in-memory store
 async function logAdminMessage(
   type: AdminLogEntry['type'], // Use the more specific type from AdminLogEntry
@@ -242,7 +233,7 @@ async function logAdminMessage(
   data: AdminLogDataType      // Use the specific union type for data
 ): Promise<void> {
   const timestamp = new Date().toISOString();
-  
+
   // For debugging, let's log what's being passed to logAdminMessage
   // console.log(`LOGGING [${type}] ReqID [${requestId}]:`, JSON.stringify(data, null, 2));
 
@@ -252,7 +243,7 @@ async function logAdminMessage(
     requestId: String(requestId),
     data,
   };
-  
+
   adminMessageHistory.unshift(logEntry);
 
   if (adminMessageHistory.length > MAX_ADMIN_HISTORY_LENGTH) {
@@ -455,7 +446,7 @@ apiRouter.post('/chat/completions', async (req: Request, res: Response): Promise
       }
       return;
     }
-    
+
     if (newRequestBehavior === 'queue') {
       requestQueue.push(queuedItem);
       logAdminMessage('CHAT_REQUEST_QUEUED', requestId, {
@@ -476,8 +467,8 @@ apiRouter.post('/chat/completions', async (req: Request, res: Response): Promise
     // This catch is a safety net if processRequest itself throws an unhandled error *before* it can send a response.
     console.error(`SERVER: Unhandled error from processRequest for ${requestId} in /chat/completions:`, error);
     logAdminMessage('CHAT_ERROR_RESPONSE_SENT', requestId, {
-        toClientError: { message: (error as Error).message, type: "server_error", code: "unhandled_processing_catch" },
-        status: `Error: ${(error as Error).message}`
+      toClientError: { message: (error as Error).message, type: "server_error", code: "unhandled_processing_catch" },
+      status: `Error: ${(error as Error).message}`
     }).catch(err => console.error("ADMIN_LOG_ERROR (CHAT_ERROR_RESPONSE_SENT):", err));
     if (!res.headersSent) {
       res.status(500).json({
@@ -525,13 +516,13 @@ apiRouter.get('/admin/message-history', (req: Request, res: Response): void => {
   } catch (error) {
     console.error('Error fetching message history from in-memory store:', error);
     if (!res.headersSent) {
-        res.status(500).json({
-            error: {
-                message: (error instanceof Error ? error.message : String(error)) || 'Failed to retrieve message history',
-                type: 'server_error', // Changed from redis_error
-                code: 'history_retrieval_failed'
-            }
-        });
+      res.status(500).json({
+        error: {
+          message: (error instanceof Error ? error.message : String(error)) || 'Failed to retrieve message history',
+          type: 'server_error', // Changed from redis_error
+          code: 'history_retrieval_failed'
+        }
+      });
     }
   }
 });
@@ -552,13 +543,13 @@ apiRouter.get('/admin/server-info', (req: Request, res: Response): void => {
   } catch (error) {
     console.error('Error fetching server info:', error);
     if (!res.headersSent) {
-        res.status(500).json({
-            error: {
-                message: (error instanceof Error ? error.message : String(error)) || 'Failed to retrieve server info',
-                type: 'server_error',
-                code: 'server_info_failed'
-            }
-        });
+      res.status(500).json({
+        error: {
+          message: (error instanceof Error ? error.message : String(error)) || 'Failed to retrieve server info',
+          type: 'server_error',
+          code: 'server_info_failed'
+        }
+      });
     }
   }
 });
@@ -608,7 +599,7 @@ apiRouter.post('/admin/update-settings', (req: Request, res: Response): void => 
   const { requestTimeoutMs, port, newRequestBehavior: newBehaviorValue } = req.body;
   let configChanged = false;
   let messages: string[] = [];
-  
+
   const currentConfig = loadServerConfig(); // Load current disk config to preserve other settings
 
   if (requestTimeoutMs !== undefined) {
@@ -632,7 +623,7 @@ apiRouter.post('/admin/update-settings', (req: Request, res: Response): void => 
       currentConfig.port = newPort; // Update config for saving
       configChanged = true;
       messages.push(`Server port configured to ${newPort}. This change will take effect after server restart.`);
-       logAdminMessage('SETTING_UPDATE', 'SERVER_CONFIG', { setting: 'port', value: newPort, requiresRestart: true })
+      logAdminMessage('SETTING_UPDATE', 'SERVER_CONFIG', { setting: 'port', value: newPort, requiresRestart: true })
         .catch(err => console.error("ADMIN_LOG_ERROR (SETTING_UPDATE):", err));
     } else {
       res.status(400).json({ error: 'Invalid port value. Must be a positive number between 1 and 65535.' });
@@ -669,8 +660,96 @@ app.get('/health', (req: Request, res: Response) => {
 
 // Mount the API router
 app.use('/v1', apiRouter);
-// Start the server
-server.listen(PORT, () => {
-  console.log(`OpenAI-compatible relay server running on port ${PORT}`);
-  console.log(`WebSocket server for browser extensions running on ws://localhost:${PORT}`);
-});
+
+async function killProcessOnPort(port: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    exec(`netstat -ano | findstr :${port} | findstr LISTENING`, (error, stdout) => {
+      // If error.code === 1, it means no process is using the port (not a real error)
+      if (error) {
+        if ((error as any).code === 1) {
+          // No process found, treat as success and do not log a warning
+          return resolve();
+        }
+        return reject(error);
+      }
+
+      const lines = stdout.split('\n');
+      const pidLine = lines.find(line => line.includes('LISTENING'));
+
+      if (pidLine) {
+        const match = pidLine.match(/(\d+)\s*$/);
+        if (match) {
+          const pid = match[1];
+          console.log(`Terminating process ${pid} using port ${port}`);
+          exec(`taskkill /PID ${pid} /F`, (killError) => {
+            if (killError) return reject(killError);
+            resolve();
+          });
+          return;
+        }
+      }
+      // If we don't find a PID, just resolve without killing anything
+      resolve();
+    });
+  });
+}
+
+// Start the server with retry logic
+async function startServer() {
+  const maxRetries = 3;
+  let retryCount = 0;
+
+  // Always attempt to kill any process using the port before first start
+  killProcessOnPort(PORT)
+    .catch((err) => {
+      // Log but continue, as the process may not exist
+      console.warn(`Initial port cleanup: could not kill process on port ${PORT}:`, err);
+    })
+    .finally(() => {
+      const attemptStart = () => {
+        // Create new server instance for each attempt
+        const serverInstance = http.createServer(app);
+        const wssInstance = new WebSocketServer({ server: serverInstance });
+
+        // Reattach WebSocket handlers
+        wssInstance.on('connection', (ws: WebSocket) => {
+          console.log('Browser extension connected');
+          activeConnections.push(ws);
+          ws.on('message', handleExtensionMessage);
+          ws.on('close', () => {
+            activeConnections = activeConnections.filter(conn => conn !== ws);
+          });
+        });
+
+        serverInstance.once('error', async (err: NodeJS.ErrnoException) => {
+          if (err.code === 'EADDRINUSE' && retryCount < maxRetries) {
+            console.log(`Port ${PORT} in use, attempting to terminate process...`);
+            retryCount++;
+
+            try {
+              // Close server before retrying
+              serverInstance.close();
+              await killProcessOnPort(PORT);
+              console.log(`Retrying server startup (attempt ${retryCount}/${maxRetries})`);
+              setTimeout(attemptStart, 1000);
+            } catch (killError) {
+              console.error('Error terminating process:', killError);
+              process.exit(1);
+            }
+          } else {
+            console.error('Server startup failed:', err);
+            process.exit(1);
+          }
+        });
+
+        serverInstance.listen(PORT, () => {
+          console.log(`OpenAI-compatible relay server running on port ${PORT}`);
+          console.log(`WebSocket server for browser extensions running on ws://localhost:${PORT}`);
+        });
+      };
+
+      attemptStart();
+    });
+}
+
+startServer();
