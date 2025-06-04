@@ -584,7 +584,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                   }
               } else { // No error from content.js, proceed to send data
                   try {
-                      const responseText = message.text || "";
+                      let responseText = message.text || "";
+                      
+                      // Decode text if it was encoded by content script
+                      if (message.encoded) {
+                          responseText = decodeURIComponent(responseText);
+                      }
+                      
                       console.log(BG_LOG_PREFIX, `Attempting to send FINAL CHAT_RESPONSE_CHUNK for requestId ${message.requestId}. Data length: ${responseText.length}`);
                       relaySocket.send(JSON.stringify({
                           type: "CHAT_RESPONSE_CHUNK",
@@ -996,7 +1002,7 @@ chrome.debugger.onEvent.addListener((debuggeeId, message, params) => {
                     }
                     console.log(BG_LOG_PREFIX, `Raw responseBodyData for debugger requestId ${params.requestId} (first 200 chars):`, JSON.stringify(responseBodyData).substring(0, 200) + "...");
 
-                    const rawBodyText = responseBodyData.base64Encoded ? atob(responseBodyData.body) : responseBodyData.body;
+                    const rawBodyText = responseBodyData.base64Encoded ? new TextDecoder('utf-8').decode(Uint8Array.from(atob(responseBodyData.body), c => c.charCodeAt(0))) : responseBodyData.body;
                     
                     if (rawBodyText === undefined || rawBodyText === null) {
                         console.error(BG_LOG_PREFIX, `Extracted rawBodyText is undefined or null for debugger requestId ${params.requestId}.`);

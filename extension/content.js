@@ -812,22 +812,26 @@ function handleProviderResponse(requestId, responseText, isFinal) {
       const MAX_RESPONSE_TEXT_LENGTH = 500 * 1024; // 500KB limit for safety
       let messageToSendToBackground;
 
+      // Encode special Unicode characters before transmission
+      const encodedText = responseText ? encodeURIComponent(responseText) : "";
+      
       if (responseText && typeof responseText === 'string' && responseText.length > MAX_RESPONSE_TEXT_LENGTH) {
           console.warn(CS_LOG_PREFIX, `ResponseText for requestId ${requestId} is too large (${responseText.length} bytes). Sending error and truncated text.`);
           messageToSendToBackground = {
               type: "FINAL_RESPONSE_TO_RELAY",
               requestId: requestId,
               error: `Response too large to transmit (length: ${responseText.length}). Check content script logs for truncated version.`,
-              // text: responseText.substring(0, MAX_RESPONSE_TEXT_LENGTH) + "... (truncated by content.js)", // Optionally send truncated
-              text: `Error: Response too large (length: ${responseText.length}). See AI Studio for full response.`, // Simpler error text
-              isFinal: true // This is a final error state
+              text: `Error: Response too large (length: ${responseText.length}). See AI Studio for full response.`,
+              isFinal: true,
+              encoded: true
           };
       } else {
           messageToSendToBackground = {
               type: "FINAL_RESPONSE_TO_RELAY",
               requestId: requestId,
-              text: responseText, // Can be null if AIStudioProvider parsed it as such
-              isFinal: isFinal
+              text: encodedText,
+              isFinal: isFinal,
+              encoded: true
           };
       }
 
