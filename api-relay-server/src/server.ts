@@ -15,13 +15,14 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see https://www.gnu.org/licenses/.
  */
-import express, { Request, Response, NextFunction, Router } from 'express';
 import bodyParser from 'body-parser';
+import { execSync } from 'child_process'; // Import for executing commands
 import cors from 'cors';
-import { WebSocketServer, WebSocket } from 'ws';
+import express, { NextFunction, Request, Response, Router } from 'express';
+import fs from 'fs';
 import http from 'http';
 import path from 'path';
-import fs from 'fs';
+import { WebSocket, WebSocketServer } from 'ws';
 // Interfaces
 interface PendingRequest {
   resolve: (value: any) => void;
@@ -91,16 +92,16 @@ type AdminLogDataType = ChatRequestData | ChatResponseData | ChatErrorData | any
 interface AdminLogEntry {
   timestamp: string;
   type:
-    | 'CHAT_REQUEST_RECEIVED'
-    | 'CHAT_RESPONSE_SENT'
-    | 'CHAT_ERROR_RESPONSE_SENT'
-    | 'CHAT_REQUEST_QUEUED'
-    | 'CHAT_REQUEST_DROPPED'
-    | 'CHAT_REQUEST_DEQUEUED'
-    | 'CHAT_REQUEST_PROCESSING'
-    | 'CHAT_REQUEST_ERROR' // For pre-processing errors like no extension
-    | 'SETTING_UPDATE' // Existing type, ensure it's included
-    | string; // Fallback for other/future types
+  | 'CHAT_REQUEST_RECEIVED'
+  | 'CHAT_RESPONSE_SENT'
+  | 'CHAT_ERROR_RESPONSE_SENT'
+  | 'CHAT_REQUEST_QUEUED'
+  | 'CHAT_REQUEST_DROPPED'
+  | 'CHAT_REQUEST_DEQUEUED'
+  | 'CHAT_REQUEST_PROCESSING'
+  | 'CHAT_REQUEST_ERROR' // For pre-processing errors like no extension
+  | 'SETTING_UPDATE' // Existing type, ensure it's included
+  | string; // Fallback for other/future types
   requestId: string;
   data: AdminLogDataType;
 }
@@ -117,6 +118,7 @@ interface ServerConfig {
   requestTimeoutMs?: number;
   lastRestartRequestTimestamp?: number; // New field
   newRequestBehavior?: 'queue' | 'drop';
+  autoKillPort?: boolean; // New setting for auto-killing port
 }
 
 // Function to read configuration
@@ -147,8 +149,9 @@ const initialConfig = loadServerConfig();
 
 // Initialize newRequestBehavior from config, defaulting to 'queue'
 newRequestBehavior = initialConfig.newRequestBehavior && (initialConfig.newRequestBehavior === 'queue' || initialConfig.newRequestBehavior === 'drop')
-                    ? initialConfig.newRequestBehavior
-                    : 'queue';
+  ? initialConfig.newRequestBehavior
+  : 'queue';
+let autoKillPort = initialConfig.autoKillPort === undefined ? false : initialConfig.autoKillPort; // Initialize autoKillPort
 
 const PORT = initialConfig.port || parseInt(process.env.PORT || '3003', 10);
 let currentRequestTimeoutMs = initialConfig.requestTimeoutMs || parseInt(process.env.REQUEST_TIMEOUT_MS || '120000', 10);
@@ -213,7 +216,7 @@ wss.on('connection', (ws: WebSocket) => {
             console.error(`SERVER: Rejecting request ${requestIdToProcess} with error: ${responseDataToUse}`);
             pendingRequest.reject(new Error(responseDataToUse || "Error from extension"));
           } else {
-            console.log(`SERVER: Resolving request ${requestIdToProcess} with data (first 100 chars): ${(responseDataToUse || "").substring(0,100)}`);
+            console.log(`SERVER: Resolving request ${requestIdToProcess} with data (first 100 chars): ${(responseDataToUse || "").substring(0, 100)}`);
             pendingRequest.resolve(responseDataToUse);
           }
           pendingRequests.delete(requestIdToProcess);
@@ -242,7 +245,7 @@ async function logAdminMessage(
   data: AdminLogDataType      // Use the specific union type for data
 ): Promise<void> {
   const timestamp = new Date().toISOString();
-  
+
   // For debugging, let's log what's being passed to logAdminMessage
   // console.log(`LOGGING [${type}] ReqID [${requestId}]:`, JSON.stringify(data, null, 2));
 
@@ -252,7 +255,7 @@ async function logAdminMessage(
     requestId: String(requestId),
     data,
   };
-  
+
   adminMessageHistory.unshift(logEntry);
 
   if (adminMessageHistory.length > MAX_ADMIN_HISTORY_LENGTH) {
@@ -455,7 +458,7 @@ apiRouter.post('/chat/completions', async (req: Request, res: Response): Promise
       }
       return;
     }
-    
+
     if (newRequestBehavior === 'queue') {
       requestQueue.push(queuedItem);
       logAdminMessage('CHAT_REQUEST_QUEUED', requestId, {
@@ -476,8 +479,8 @@ apiRouter.post('/chat/completions', async (req: Request, res: Response): Promise
     // This catch is a safety net if processRequest itself throws an unhandled error *before* it can send a response.
     console.error(`SERVER: Unhandled error from processRequest for ${requestId} in /chat/completions:`, error);
     logAdminMessage('CHAT_ERROR_RESPONSE_SENT', requestId, {
-        toClientError: { message: (error as Error).message, type: "server_error", code: "unhandled_processing_catch" },
-        status: `Error: ${(error as Error).message}`
+      toClientError: { message: (error as Error).message, type: "server_error", code: "unhandled_processing_catch" },
+      status: `Error: ${(error as Error).message}`
     }).catch(err => console.error("ADMIN_LOG_ERROR (CHAT_ERROR_RESPONSE_SENT):", err));
     if (!res.headersSent) {
       res.status(500).json({
@@ -525,13 +528,13 @@ apiRouter.get('/admin/message-history', (req: Request, res: Response): void => {
   } catch (error) {
     console.error('Error fetching message history from in-memory store:', error);
     if (!res.headersSent) {
-        res.status(500).json({
-            error: {
-                message: (error instanceof Error ? error.message : String(error)) || 'Failed to retrieve message history',
-                type: 'server_error', // Changed from redis_error
-                code: 'history_retrieval_failed'
-            }
-        });
+      res.status(500).json({
+        error: {
+          message: (error instanceof Error ? error.message : String(error)) || 'Failed to retrieve message history',
+          type: 'server_error', // Changed from redis_error
+          code: 'history_retrieval_failed'
+        }
+      });
     }
   }
 });
@@ -544,6 +547,7 @@ apiRouter.get('/admin/server-info', (req: Request, res: Response): void => {
       port: PORT,
       requestTimeoutMs: currentRequestTimeoutMs, // Report the current mutable value
       newRequestBehavior: newRequestBehavior, // Add the current behavior
+      autoKillPort: autoKillPort, // Add the current autoKillPort setting
       pingIntervalMs: null, // Placeholder - No explicit ping interval defined for client pings
       connectedExtensionsCount: activeConnections.length,
       uptimeSeconds: uptimeSeconds,
@@ -552,13 +556,13 @@ apiRouter.get('/admin/server-info', (req: Request, res: Response): void => {
   } catch (error) {
     console.error('Error fetching server info:', error);
     if (!res.headersSent) {
-        res.status(500).json({
-            error: {
-                message: (error instanceof Error ? error.message : String(error)) || 'Failed to retrieve server info',
-                type: 'server_error',
-                code: 'server_info_failed'
-            }
-        });
+      res.status(500).json({
+        error: {
+          message: (error instanceof Error ? error.message : String(error)) || 'Failed to retrieve server info',
+          type: 'server_error',
+          code: 'server_info_failed'
+        }
+      });
     }
   }
 });
@@ -605,10 +609,10 @@ apiRouter.post('/admin/restart-server', (req: Request, res: Response): void => {
 
 // The more comprehensive update-settings endpoint below handles both port and requestTimeoutMs.
 apiRouter.post('/admin/update-settings', (req: Request, res: Response): void => {
-  const { requestTimeoutMs, port, newRequestBehavior: newBehaviorValue } = req.body;
+  const { requestTimeoutMs, port, newRequestBehavior: newBehaviorValue, autoKillPort: newAutoKillPortValue } = req.body;
   let configChanged = false;
   let messages: string[] = [];
-  
+
   const currentConfig = loadServerConfig(); // Load current disk config to preserve other settings
 
   if (requestTimeoutMs !== undefined) {
@@ -632,7 +636,7 @@ apiRouter.post('/admin/update-settings', (req: Request, res: Response): void => 
       currentConfig.port = newPort; // Update config for saving
       configChanged = true;
       messages.push(`Server port configured to ${newPort}. This change will take effect after server restart.`);
-       logAdminMessage('SETTING_UPDATE', 'SERVER_CONFIG', { setting: 'port', value: newPort, requiresRestart: true })
+      logAdminMessage('SETTING_UPDATE', 'SERVER_CONFIG', { setting: 'port', value: newPort, requiresRestart: true })
         .catch(err => console.error("ADMIN_LOG_ERROR (SETTING_UPDATE):", err));
     } else {
       res.status(400).json({ error: 'Invalid port value. Must be a positive number between 1 and 65535.' });
@@ -654,6 +658,20 @@ apiRouter.post('/admin/update-settings', (req: Request, res: Response): void => 
     }
   }
 
+  if (newAutoKillPortValue !== undefined) {
+    if (typeof newAutoKillPortValue === 'boolean') {
+      autoKillPort = newAutoKillPortValue; // Update in-memory value immediately
+      currentConfig.autoKillPort = newAutoKillPortValue; // Update config for saving
+      configChanged = true;
+      messages.push(`Auto-kill port setting updated to '${autoKillPort}'. This change is effective on next server startup if port conflict occurs.`);
+      logAdminMessage('SETTING_UPDATE', 'SERVER_CONFIG', { setting: 'autoKillPort', value: autoKillPort, requiresRestartToSeeEffect: true })
+        .catch(err => console.error("ADMIN_LOG_ERROR (SETTING_UPDATE autoKillPort):", err));
+    } else {
+      res.status(400).json({ error: "Invalid autoKillPort value. Must be a boolean." });
+      return;
+    }
+  }
+
   if (configChanged) {
     saveServerConfig(currentConfig);
     res.json({ message: messages.join(' ') });
@@ -669,8 +687,73 @@ app.get('/health', (req: Request, res: Response) => {
 
 // Mount the API router
 app.use('/v1', apiRouter);
+
+// Function to handle port conflict before starting the server
+function handlePortConflict(portToFree: number, killProcess: boolean): void {
+  if (!killProcess) {
+    console.log(`Auto-kill for port ${portToFree} is disabled. Will not attempt to free port.`);
+    return;
+  }
+
+  console.log(`Checking if port ${portToFree} is in use...`);
+  try {
+    // Command to find process using the port (Windows specific)
+    const command = `netstat -ano -p TCP | findstr ":${portToFree}.*LISTENING"`;
+    const output = execSync(command, { encoding: 'utf-8' });
+
+    if (output) {
+      console.log(`Port ${portToFree} is in use. Output:\n${output}`);
+      // Extract PID - Example: TCP    0.0.0.0:3003           0.0.0.0:0              LISTENING       12345
+      // PID is the last number on the line.
+      const lines = output.trim().split('\n');
+      if (lines.length > 0) {
+        const firstLine = lines[0];
+        const parts = firstLine.trim().split(/\s+/);
+        const pid = parts[parts.length - 1];
+
+        if (pid && !isNaN(parseInt(pid))) {
+          console.log(`Attempting to kill process with PID: ${pid} using port ${portToFree}`);
+          try {
+            execSync(`taskkill /PID ${pid} /F`);
+            console.log(`Successfully killed process ${pid} using port ${portToFree}.`);
+            logAdminMessage('PORT_KILLED', `PORT_${portToFree}`, { port: portToFree, pid: pid, status: 'success' })
+              .catch(err => console.error("ADMIN_LOG_ERROR (PORT_KILLED):", err));
+          } catch (killError) {
+            console.error(`Failed to kill process ${pid} using port ${portToFree}:`, killError);
+            logAdminMessage('PORT_KILL_FAILED', `PORT_${portToFree}`, { port: portToFree, pid: pid, status: 'failure', error: (killError as Error).message })
+              .catch(err => console.error("ADMIN_LOG_ERROR (PORT_KILL_FAILED):", err));
+          }
+        } else {
+          console.warn(`Could not extract a valid PID for port ${portToFree} from netstat output: ${firstLine}`);
+        }
+      } else {
+        console.log(`No process found listening on port ${portToFree} from netstat output.`);
+      }
+    } else {
+      console.log(`Port ${portToFree} is free.`);
+    }
+  } catch (error: any) {
+    // If findstr returns an error, it usually means the port is not found / not in use.
+    if (error.status === 1) { // findstr exits with 1 if string not found
+      console.log(`Port ${portToFree} appears to be free (netstat/findstr did not find it).`);
+    } else {
+      console.error(`Error checking port ${portToFree}:`, error.message);
+    }
+  }
+}
+
 // Start the server
-server.listen(PORT, () => {
-  console.log(`OpenAI-compatible relay server running on port ${PORT}`);
-  console.log(`WebSocket server for browser extensions running on ws://localhost:${PORT}`);
+async function startServer() {
+  // Handle potential port conflict before starting the server
+  handlePortConflict(PORT, autoKillPort);
+
+  server.listen(PORT, () => {
+    console.log(`OpenAI-compatible relay server running on port ${PORT}`);
+    console.log(`WebSocket server for browser extensions running on ws://localhost:${PORT}`);
+  });
+}
+
+startServer().catch(err => {
+  console.error("Failed to start server:", err);
+  process.exit(1);
 });

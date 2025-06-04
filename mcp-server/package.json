@@ -15,6 +15,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "chat-relay-mcp": "file:",
     "mcp-framework": "^0.2.2",
     "node-fetch": "^3.3.2",
     "ws": "^8.18.2",

@@ -1,41 +1,102 @@
 <!--
   Chat Relay: Relay for AI Chat Interfaces
   Copyright (C) 2025 Jamison Moore
-
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU Affero General Public License as
   published by the Free Software Foundation, either version 3 of the
   License, or (at your option) any later version.
-
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU Affero General Public License for more details.
-
   You should have received a copy of the GNU Affero General Public License
   along with this program.  If not, see https://www.gnu.org/licenses/.
 -->
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat Relay Admin</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; color: #333; }
-        header { background-color: #333; color: #fff; padding: 1em; text-align: center; }
-        nav { background-color: #444; padding: 0.5em; }
-        nav ul { list-style-type: none; padding: 0; margin: 0; text-align: center; }
-        nav ul li { display: inline; margin-right: 20px; }
-        nav ul li a { color: #fff; text-decoration: none; font-weight: bold; }
-        nav ul li a.active { text-decoration: underline; }
-        .container { padding: 1em; }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-        h2 { border-bottom: 2px solid #333; padding-bottom: 0.5em; }
-        table { width: 100%; border-collapse: collapse; margin-top: 1em; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #555; color: white; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+
+        header {
+            background-color: #333;
+            color: #fff;
+            padding: 1em;
+            text-align: center;
+        }
+
+        nav {
+            background-color: #444;
+            padding: 0.5em;
+        }
+
+        nav ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+            text-align: center;
+        }
+
+        nav ul li {
+            display: inline;
+            margin-right: 20px;
+        }
+
+        nav ul li a {
+            color: #fff;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        nav ul li a.active {
+            text-decoration: underline;
+        }
+
+        .container {
+            padding: 1em;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        h2 {
+            border-bottom: 2px solid #333;
+            padding-bottom: 0.5em;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1em;
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #555;
+            color: white;
+        }
+
         .log-window {
             background-color: #222;
             color: #0f0;
@@ -46,10 +107,21 @@
             border: 1px solid #444;
             margin-top: 1em;
         }
-        .log-entry { white-space: pre-wrap; }
-        .collapsible-header { background-color: #555; color: white; padding: 0.5em; cursor: pointer; text-align: center; }
+
+        .log-entry {
+            white-space: pre-wrap;
+        }
+
+        .collapsible-header {
+            background-color: #555;
+            color: white;
+            padding: 0.5em;
+            cursor: pointer;
+            text-align: center;
+        }
     </style>
 </head>
+
 <body>
     <header>
         <h1>Chat Relay Admin Dashboard</h1>
@@ -63,7 +135,8 @@
     </nav>
     <div class="container">
         <div id="messages" class="tab-content active">
-            <h2>Message History <button id="refresh-messages-btn" style="font-size: 0.8em; margin-left: 10px;">Refresh Messages</button></h2>
+            <h2>Message History <button id="refresh-messages-btn" style="font-size: 0.8em; margin-left: 10px;">Refresh
+                    Messages</button></h2>
             <table>
                 <thead>
                     <tr>
@@ -97,13 +170,18 @@
                 <div style="margin-top: 0.5em;">
                     <label>New Request Behavior (if extension busy):</label>
                     <div>
-                        <input type="radio" id="newRequestBehaviorQueue" name="newRequestBehavior" value="queue" checked>
+                        <input type="radio" id="newRequestBehaviorQueue" name="newRequestBehavior" value="queue"
+                            checked>
                         <label for="newRequestBehaviorQueue">Queue</label>
                     </div>
                     <div>
                         <input type="radio" id="newRequestBehaviorDrop" name="newRequestBehavior" value="drop">
                         <label for="newRequestBehaviorDrop">Drop</label>
                     </div>
+                </div>
+                <div style="margin-top: 0.5em;">
+                    <label for="auto-kill-port-input">Auto-kill conflicting port 3003 process on startup: </label>
+                    <input type="checkbox" id="auto-kill-port-input">
                 </div>
                 <button id="save-settings-btn" style="margin-top: 1em; margin-bottom: 0.5em;">Save Settings</button>
                 <span id="update-status-msg" style="margin-left: 10px; font-style: italic;"></span>
@@ -115,7 +193,9 @@
             <div id="status-content">
                 <p>Server Uptime: <span id="status-uptime">N/A</span></p>
                 <p>Connected Extensions: <span id="status-connected-extensions">0</span></p>
-                <button id="restart-server-btn" style="margin-top: 1em; padding: 0.5em 1em; background-color: #d9534f; color: white; border: none; cursor: pointer;">Restart Server</button>
+                <button id="restart-server-btn"
+                    style="margin-top: 1em; padding: 0.5em 1em; background-color: #d9534f; color: white; border: none; cursor: pointer;">Restart
+                    Server</button>
             </div>
         </div>
     </div>
@@ -135,7 +215,6 @@
                 link.classList.add('active');
                 const activeTabContent = document.getElementById(link.dataset.tab);
                 activeTabContent.classList.add('active');
-
                 // If settings or status tab is activated, refresh their content
                 if (link.dataset.tab === 'settings' || link.dataset.tab === 'status') {
                     fetchAndDisplayServerInfo();
@@ -152,7 +231,6 @@
         }
         const messageHistoryBody = document.getElementById('message-history-body');
         const refreshButton = document.getElementById('refresh-messages-btn');
-
         function createPreCell(data) {
             const cell = document.createElement('td');
             if (data === undefined || data === null) {
@@ -168,7 +246,6 @@
             }
             return cell;
         }
-
         async function fetchAndDisplayMessageHistory() {
             try {
                 const response = await fetch('/v1/admin/message-history');
@@ -176,9 +253,7 @@
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 const messages = await response.json();
-
                 messageHistoryBody.innerHTML = ''; // Clear existing rows
-
                 if (messages.length === 0) {
                     const row = messageHistoryBody.insertRow();
                     const cell = row.insertCell();
@@ -187,7 +262,6 @@
                     cell.style.textAlign = 'center';
                     return;
                 }
-
                 // Group messages by requestId
                 const groupedMessages = messages.reduce((acc, logEntry) => {
                     const id = logEntry.requestId;
@@ -203,7 +277,6 @@
                             status: "Unknown"
                         };
                     }
-
                     // Update fields based on log type
                     switch (logEntry.type) {
                         case 'CHAT_REQUEST_RECEIVED':
@@ -231,22 +304,19 @@
                     }
                     return acc;
                 }, {});
-
                 // Convert grouped messages object to an array and sort by timestamp (most recent first)
                 const consolidatedMessages = Object.values(groupedMessages).sort((a, b) => {
                     // Sort by startTimestamp, most recent first
                     return new Date(b.startTimestamp) - new Date(a.startTimestamp);
                 });
-
                 if (consolidatedMessages.length === 0) {
-                     const row = messageHistoryBody.insertRow();
+                    const row = messageHistoryBody.insertRow();
                     const cell = row.insertCell();
                     cell.colSpan = 8; // Adjusted for new column
                     cell.textContent = 'No consolidated message history to display.';
                     cell.style.textAlign = 'center';
                     return;
                 }
-
                 consolidatedMessages.forEach(msg => {
                     const row = messageHistoryBody.insertRow();
                     row.insertCell().textContent = new Date(msg.startTimestamp).toLocaleString();
@@ -269,18 +339,16 @@
                 cell.style.textAlign = 'center';
             }
         }
-
         if (refreshButton) {
             refreshButton.addEventListener('click', fetchAndDisplayMessageHistory);
         }
-
         fetchAndDisplayMessageHistory(); // Initial load for messages
-
         // Elements for settings and status
         const portInputEl = document.getElementById('port-input'); // Corrected ID
         const requestTimeoutInputEl = document.getElementById('request-timeout-input');
         const newRequestBehaviorQueueEl = document.getElementById('newRequestBehaviorQueue');
         const newRequestBehaviorDropEl = document.getElementById('newRequestBehaviorDrop');
+        const autoKillPortInputEl = document.getElementById('auto-kill-port-input');
         const saveSettingsBtn = document.getElementById('save-settings-btn');
         const updateStatusMsgEl = document.getElementById('update-status-msg');
         const settingPingIntervalEl = document.getElementById('setting-ping-interval');
@@ -288,7 +356,6 @@
         const statusUptimeEl = document.getElementById('status-uptime');
         const statusConnectedExtensionsEl = document.getElementById('status-connected-extensions');
         const restartServerBtn = document.getElementById('restart-server-btn');
-
         function formatUptime(totalSeconds) {
             if (totalSeconds === null || totalSeconds === undefined) return 'N/A';
             const days = Math.floor(totalSeconds / (3600 * 24));
@@ -297,7 +364,6 @@
             totalSeconds %= 3600;
             const minutes = Math.floor(totalSeconds / 60);
             const seconds = totalSeconds % 60;
-
             let uptimeString = '';
             if (days > 0) uptimeString += `${days}d `;
             if (hours > 0) uptimeString += `${hours}h `;
@@ -305,7 +371,6 @@
             uptimeString += `${seconds}s`;
             return uptimeString.trim() || '0s';
         }
-
         async function fetchAndDisplayServerInfo() {
             try {
                 const response = await fetch('/v1/admin/server-info');
@@ -313,44 +378,40 @@
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 const serverInfo = await response.json();
-
                 // Populate Settings
-                if(portInputEl) portInputEl.value = serverInfo.port || ''; // Use portInputEl
-                if(requestTimeoutInputEl) requestTimeoutInputEl.value = serverInfo.requestTimeoutMs !== null ? serverInfo.requestTimeoutMs : '';
-                if(settingPingIntervalEl) settingPingIntervalEl.textContent = serverInfo.pingIntervalMs !== null ? `${serverInfo.pingIntervalMs} ms` : 'N/A (Not Implemented)';
-                
+                if (portInputEl) portInputEl.value = serverInfo.port || ''; // Use portInputEl
+                if (requestTimeoutInputEl) requestTimeoutInputEl.value = serverInfo.requestTimeoutMs !== null ? serverInfo.requestTimeoutMs : '';
+                if (settingPingIntervalEl) settingPingIntervalEl.textContent = serverInfo.pingIntervalMs !== null ? `${serverInfo.pingIntervalMs} ms` : 'N/A (Not Implemented)';
                 if (serverInfo.newRequestBehavior === 'drop') {
-                    if(newRequestBehaviorDropEl) newRequestBehaviorDropEl.checked = true;
+                    if (newRequestBehaviorDropEl) newRequestBehaviorDropEl.checked = true;
                 } else {
-                    if(newRequestBehaviorQueueEl) newRequestBehaviorQueueEl.checked = true; // Default to queue
+                    if (newRequestBehaviorQueueEl) newRequestBehaviorQueueEl.checked = true; // Default to queue
                 }
-
+                if (autoKillPortInputEl) autoKillPortInputEl.checked = serverInfo.autoKillPort || false;
                 // Populate Status
-                if(statusUptimeEl) statusUptimeEl.textContent = formatUptime(serverInfo.uptimeSeconds);
-                if(statusConnectedExtensionsEl) statusConnectedExtensionsEl.textContent = serverInfo.connectedExtensionsCount !== null ? serverInfo.connectedExtensionsCount : 'N/A';
-
+                if (statusUptimeEl) statusUptimeEl.textContent = formatUptime(serverInfo.uptimeSeconds);
+                if (statusConnectedExtensionsEl) statusConnectedExtensionsEl.textContent = serverInfo.connectedExtensionsCount !== null ? serverInfo.connectedExtensionsCount : 'N/A';
             } catch (error) {
                 console.error('Error fetching server info:', error);
-                if(portInputEl) portInputEl.value = 'Error';
-                if(requestTimeoutInputEl) requestTimeoutInputEl.value = 'Error';
-                if(settingPingIntervalEl) settingPingIntervalEl.textContent = 'Error';
-                if(newRequestBehaviorQueueEl) newRequestBehaviorQueueEl.checked = true; // Default on error
+                if (portInputEl) portInputEl.value = 'Error';
+                if (requestTimeoutInputEl) requestTimeoutInputEl.value = 'Error';
+                if (settingPingIntervalEl) settingPingIntervalEl.textContent = 'Error';
+                if (newRequestBehaviorQueueEl) newRequestBehaviorQueueEl.checked = true; // Default on error
+                if (autoKillPortInputEl) autoKillPortInputEl.checked = false; // Default on error
                 // Ensure error handling for status elements
-                if(statusUptimeEl) statusUptimeEl.textContent = 'Error loading uptime';
-                if(statusConnectedExtensionsEl) statusConnectedExtensionsEl.textContent = 'Error loading connections';
+                if (statusUptimeEl) statusUptimeEl.textContent = 'Error loading uptime';
+                if (statusConnectedExtensionsEl) statusConnectedExtensionsEl.textContent = 'Error loading connections';
             }
         }
-        
         async function handleSaveSettings() {
-            if (!requestTimeoutInputEl || !portInputEl || !updateStatusMsgEl || !newRequestBehaviorQueueEl || !newRequestBehaviorDropEl) return;
-
+            if (!requestTimeoutInputEl || !portInputEl || !updateStatusMsgEl || !newRequestBehaviorQueueEl || !newRequestBehaviorDropEl || !autoKillPortInputEl) return;
             const newTimeout = parseInt(requestTimeoutInputEl.value, 10);
             const newPort = parseInt(portInputEl.value, 10);
             const selectedNewRequestBehavior = newRequestBehaviorQueueEl.checked ? 'queue' : 'drop';
+            const autoKillPort = autoKillPortInputEl.checked;
             let settingsToUpdate = {};
             let validationError = false;
             let messages = [];
-
             if (requestTimeoutInputEl.value.trim() !== '') { // Only process if there's input
                 if (!isNaN(newTimeout) && newTimeout > 0) {
                     settingsToUpdate.requestTimeoutMs = newTimeout;
@@ -359,37 +420,32 @@
                     validationError = true;
                 }
             }
-
             if (portInputEl.value.trim() !== '') { // Only process if there's input
-                 if (!isNaN(newPort) && newPort > 0 && newPort <= 65535) {
+                if (!isNaN(newPort) && newPort > 0 && newPort <= 65535) {
                     settingsToUpdate.port = newPort;
                 } else {
                     messages.push('Invalid port: Must be between 1 and 65535.');
                     validationError = true;
                 }
             }
-
             // Always include newRequestBehavior as it's controlled by radio buttons
             // No specific validation needed here as it's either 'queue' or 'drop'
             settingsToUpdate.newRequestBehavior = selectedNewRequestBehavior;
-            
+            settingsToUpdate.autoKillPort = autoKillPort; // Add the new setting
             if (validationError) {
                 updateStatusMsgEl.textContent = messages.join(' ');
                 updateStatusMsgEl.style.color = 'red';
                 setTimeout(() => { updateStatusMsgEl.textContent = ''; }, 7000);
                 return;
             }
-
             if (Object.keys(settingsToUpdate).length === 0) {
                 updateStatusMsgEl.textContent = 'No changes to save.';
                 updateStatusMsgEl.style.color = 'blue';
                 setTimeout(() => { updateStatusMsgEl.textContent = ''; }, 5000);
                 return;
             }
-
             updateStatusMsgEl.textContent = 'Saving settings...';
             updateStatusMsgEl.style.color = 'orange';
-
             try {
                 const response = await fetch('/v1/admin/update-settings', {
                     method: 'POST',
@@ -415,11 +471,9 @@
             const clearTime = updateStatusMsgEl.textContent.toLowerCase().includes('restart') ? 15000 : 7000;
             setTimeout(() => { updateStatusMsgEl.textContent = ''; }, clearTime);
         }
-
         if (saveSettingsBtn) {
             saveSettingsBtn.addEventListener('click', handleSaveSettings);
         }
-        
         async function handleRestartServer() {
             if (confirm('Are you sure you want to restart the server?')) {
                 try {
@@ -432,15 +486,13 @@
                 }
             }
         }
-
         if (restartServerBtn) {
             restartServerBtn.addEventListener('click', handleRestartServer);
         }
-        
         // Initial load for settings and status
         fetchAndDisplayServerInfo();
-
         console.log("Admin UI initialized. Message history, settings, status, and restart functionality implemented.");
     </script>
 </body>
+
 </html>
