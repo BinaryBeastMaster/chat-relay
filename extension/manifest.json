@@ -17,6 +17,7 @@
     "*://*.chatgpt.com/*",
     "*://*.aistudio.com/*",
     "*://*.claude.ai/*",
+    "*://*.k2.kimi.ai/*",
     "ws://localhost:*/"
   ],
   "background": {
@@ -55,6 +56,15 @@
       "js": [
         "providers/provider-utils.js",
         "providers/gemini.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://k2.kimi.ai/*"],
+      "js": [
+        "providers/provider-utils.js",
+        "providers/kimi_k2.js",
         "content.js"
       ],
       "run_at": "document_idle"

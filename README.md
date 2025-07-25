@@ -86,12 +86,14 @@ Interacts with Gemini, AI Studio, ChatGPT, and Claude UIs. Injects chat, capture
   - [`AIStudioProvider`](extension/providers/aistudio.js)
   - [`ChatGptProvider`](extension/providers/chatgpt.js)
   - [`ClaudeProvider`](extension/providers/claude.js)
+  - [`KimiK2Provider`](extension/providers/kimi_k2.js)
  
 **Supported Chat Interfaces:**
 - Gemini (`gemini.google.com`)
 - AI Studio (`aistudio.google.com`)
 - ChatGPT (`chatgpt.com`)
 - Claude (`claude.ai`)
+- Kimi K2 (`k2.kimi.ai`)
 
 ChatGPT is a trademark of OpenAI. Gemini and AI Studio are trademarks of Google. Claude is a trademark of Anthropic. This project is not affiliated with, endorsed by, or sponsored by OpenAI, Google, or Anthropic.
 

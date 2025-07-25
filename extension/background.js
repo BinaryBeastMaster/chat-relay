@@ -36,7 +36,7 @@ let lastSuccessfullyProcessedMessageText = null; // Text of the last message suc
 const pendingRequestDetails = new Map(); // Stores { text: string } for active requests, keyed by requestId
 
 // Supported domains for chat interfaces
-const supportedDomains = ['gemini.google.com', 'aistudio.google.com', 'chatgpt.com', 'claude.ai'];
+const supportedDomains = ['gemini.google.com', 'aistudio.google.com', 'chatgpt.com', 'claude.ai', 'k2.kimi.ai'];
 
 // ===== DEBUGGER RELATED GLOBALS =====
 const BG_LOG_PREFIX = '[BG DEBUGGER]';
