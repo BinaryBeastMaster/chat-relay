@@ -22,7 +22,8 @@ const providers = {
   'gemini': window.geminiProvider,
   'aistudio': window.aiStudioProvider,
   'chatgpt': window.chatgptProvider,
-  'claude': window.claudeProvider
+  'claude': window.claudeProvider,
+  'kimi_k2': window.kimiK2Provider
 };
 
 // Get a provider by ID
@@ -40,6 +41,8 @@ function detectProvider(url) {
     return providers.chatgpt;
   } else if (url.includes('claude.ai')) {
     return providers.claude;
+  } else if (url.includes('k2.kimi.ai')) {
+    return providers.kimi_k2;
   }
   
   // Default to aistudio if we can't detect
